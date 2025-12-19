@@ -1,0 +1,952 @@
+@startuml Guest_User_Flow
+!theme plain
+title Guest User Navigation Flow
+
+skinparam state {
+  BackgroundColor<<start>> LightGreen
+  BackgroundColor<<end>> LightCoral
+  BackgroundColor<<main>> LightBlue
+  BackgroundColor<<action>> LightYellow
+}
+
+state "Login/\nRegister" as login <<start>>
+state "Guest\nDashboard" as dashboard <<main>>
+state "Menu Browse\n(Categories)" as menu <<main>>
+state "Menu Item\nDetail" as detail <<action>>
+state "Make\nReservation" as reserve <<action>>
+state "Confirmation\nScreen" as confirm <<end>>
+state "My\nReservations" as myres <<main>>
+state "Settings/\nProfile" as settings <<main>>
+
+login --> dashboard
+dashboard --> menu
+dashboard --> myres
+dashboard --> settings
+menu --> detail
+detail --> reserve
+reserve --> confirm
+confirm --> myres
+myres --> dashboard
+
+note right of reserve
+  User can make reservation
+  from menu item detail or
+  directly from dashboard
+end note
+
+note right of myres
+  View, Edit, or
+  Cancel reservations
+end note
+
+@enduml
+
+@startuml Staff_User_Flow
+!theme plain
+title Staff User Navigation Flow
+
+skinparam state {
+  BackgroundColor<<start>> LightGreen
+  BackgroundColor<<main>> LightBlue
+  BackgroundColor<<action>> LightYellow
+}
+
+state "Login\n(Staff)" as login <<start>>
+state "Staff Dashboard" as dashboard <<main>> {
+  state "Menu Management" as menu_opt
+  state "Reservations" as res_opt
+  state "Analytics" as analytics
+}
+state "Menu\nManagement" as menu <<main>>
+state "Add/Edit\nMenu Item" as edit_menu <<action>>
+state "Reservation\nManagement" as reservations <<main>>
+state "View/Confirm/\nCancel" as manage_res <<action>>
+
+login --> dashboard
+dashboard --> menu : Select Menu Mgmt
+dashboard --> reservations : Select Reservations
+dashboard --> analytics : View Reports
+
+menu --> edit_menu : Add/Edit Item
+edit_menu --> menu : Save
+
+reservations --> manage_res : Manage Booking
+manage_res --> reservations : Confirm/Cancel
+
+@enduml
+
+@startuml Complete_User_Journey
+!theme plain
+title Complete User Journey - Guest Making Reservation
+
+actor Guest as guest
+participant "Mobile App" as app
+participant "Menu Screen" as menu
+participant "Item Detail" as detail
+participant "Reservation\nForm" as form
+participant "Backend\nAPI" as api
+database "Database" as db
+participant "Notification\nService" as notif
+
+guest -> app : Open app
+app -> app : Authenticate
+app -> menu : Navigate to Menu
+
+guest -> menu : Browse items
+menu -> menu : Filter by category
+guest -> menu : Select "Grilled Salmon"
+menu -> detail : Show item details
+
+detail -> guest : Display food info,\nprice, image, allergens
+guest -> detail : Tap "Make Reservation"
+detail -> form : Navigate to form
+
+guest -> form : Select date (Dec 10)
+guest -> form : Select time (7:30 PM)
+guest -> form : Set guests (2)
+guest -> form : Select table (Table 5)
+guest -> form : Add special request\n("Anniversary...")
+guest -> form : Tap "Confirm"
+
+form -> api : POST /reservations
+api -> db : Insert reservation
+db -> api : Reservation ID
+api -> form : Success response
+
+form -> guest : Show confirmation\nwith booking ID
+form -> notif : Trigger email
+notif -> guest : Send confirmation email
+
+guest -> form : Tap "Add to Calendar"
+form -> app : Open calendar export
+app -> guest : Calendar event created
+
+note right of guest
+  User receives:
+  1. In-app confirmation
+  2. Email confirmation
+  3. Calendar event
+  4. Reminder notification (later)
+end note
+
+@enduml
+
+@startuml Staff_Reservation_Management
+!theme plain
+title Staff Handling New Reservation
+
+actor Staff as staff
+participant "Staff App" as app
+participant "Dashboard" as dash
+participant "Reservations\nList" as list
+participant "Reservation\nDetail" as detail
+database "Database" as db
+participant "Notification\nService" as notif
+actor Guest as guest
+
+guest -> db : Creates reservation\n(via app)
+db -> notif : New reservation event
+notif -> app : Push notification
+app -> staff : 🔔 Alert:\n"New reservation from\nSarah Johnson"
+
+staff -> app : Open app
+app -> dash : Show dashboard
+dash -> staff : Display "3 new\nreservations" badge
+
+staff -> dash : Tap "Reservations"
+dash -> list : Load today's reservations
+list -> db : Query reservations\nWHERE date = today
+db -> list : Return results
+
+list -> staff : Show:\n🔴 NEW - Sarah Johnson\n✓ CONFIRMED - Michael Chen\n✓ CONFIRMED - Emma Williams
+
+staff -> list : Tap [Details] on\nSarah's reservation
+list -> detail : Open detail view
+detail -> staff : Display:\n- Date, Time\n- 2 guests\n- Table 5\n- Special: "Anniversary..."
+
+staff -> detail : Review table\navailability
+detail -> staff : Table 5: Available ✓
+
+staff -> detail : Tap [✓ Confirm]
+detail -> detail : Show confirmation\ndialog
+staff -> detail : Tap [Confirm]
+
+detail -> db : UPDATE reservation\nSET status = 'CONFIRMED'
+db -> detail : Update successful
+detail -> notif : Trigger customer\nnotification
+
+notif -> guest : Push: "Reservation\nconfirmed!"
+notif -> guest : Email: Full details
+
+detail -> staff : Show success:\n"✓ Reservation confirmed.\nCustomer notified."
+detail -> list : Update list view
+list -> staff : Status changed to\n✓ CONFIRMED
+
+staff -> detail : Tap [Add Note]
+staff -> detail : Type: "Anniversary -\ndessert with candle"
+detail -> db : Save note
+db -> detail : Note saved
+
+note right of staff
+  Staff can add internal
+  notes visible to kitchen
+  and other staff members
+end note
+
+@enduml
+
+@startuml Database_Schema
+!theme plain
+title Restaurant Management Database Schema
+
+entity "User" {
+  * id : INT <<PK>>
+  --
+  * email : VARCHAR(255) <<UNIQUE>>
+  * password_hash : VARCHAR(255)
+  * full_name : VARCHAR(255)
+  * phone : VARCHAR(20)
+  * role : ENUM('GUEST', 'STAFF')
+  created_at : TIMESTAMP
+  updated_at : TIMESTAMP
+}
+
+entity "MenuItem" {
+  * id : INT <<PK>>
+  --
+  * name : VARCHAR(255)
+  description : TEXT
+  * price : DECIMAL(10,2)
+  * category : ENUM
+  image_url : VARCHAR(500)
+  is_available : BOOLEAN
+  created_at : TIMESTAMP
+  updated_at : TIMESTAMP
+}
+
+entity "Reservation" {
+  * id : INT <<PK>>
+  --
+  * user_id : INT <<FK>>
+  * reservation_date : DATE
+  * reservation_time : TIME
+  * party_size : INT
+  * table_number : VARCHAR(10)
+  special_requests : TEXT
+  * status : ENUM
+  created_at : TIMESTAMP
+  updated_at : TIMESTAMP
+  cancelled_at : TIMESTAMP
+}
+
+entity "Notification" {
+  * id : INT <<PK>>
+  --
+  * user_id : INT <<FK>>
+  * type : ENUM
+  * title : VARCHAR(255)
+  * message : TEXT
+  is_read : BOOLEAN
+  created_at : TIMESTAMP
+}
+
+User ||--o{ Reservation : "makes"
+User ||--o{ Notification : "receives"
+
+note right of User
+  **Role Types:**
+  - GUEST: Can browse menu,
+    make reservations
+  - STAFF: Can manage menu
+    and reservations
+end note
+
+note right of MenuItem
+  **Categories:**
+  - STARTERS
+  - MAINS
+  - DESSERTS
+  - DRINKS
+  - SPECIALS
+end note
+
+note right of Reservation
+  **Status Types:**
+  - PENDING
+  - CONFIRMED
+  - CANCELLED
+  - COMPLETED
+end note
+
+@enduml
+
+@startuml System_Architecture
+!theme plain
+title Restaurant Management App - System Architecture
+
+package MobileApplication {
+  component UI
+  component VM
+  component Repo
+}
+
+package LocalStorage {
+  database Room
+  component DataStore
+}
+
+package BackendServices {
+  component ApiClient
+  component NotificationService
+}
+
+package Server {
+  component ApiServer
+  database PostgresDB
+  component AuthService
+  component PushGateway
+}
+
+UI --> VM : User Actions
+VM --> Repo : Data Requests
+Repo --> Room : Local CRUD
+Repo --> DataStore : Preferences
+Repo --> ApiClient : Remote CRUD
+
+ApiClient --> ApiServer : HTTPS
+ApiServer --> PostgresDB : SQL Queries
+ApiServer --> AuthService : Verify Token
+ApiServer --> PushGateway : Send Notifications
+
+NotificationService --> PushGateway : Register Device
+
+Room ..> ApiServer : Sync when online
+PushGateway ..> UI : Display Notifications
+
+note right of Repo
+  Offline-first: local cache, background sync
+end note
+
+note bottom of Room
+  Cached: menu, user profile, reservations, notifications
+end note
+
+@enduml
+
+@startuml Use_Case_Diagram
+!theme plain
+title Restaurant Management App - Use Cases
+
+left to right direction
+
+actor "Guest User" as Guest
+actor "Staff User" as Staff
+actor "System" as System
+
+rectangle "Restaurant Management System" {
+  usecase "Browse Menu" as UC1
+  usecase "View Menu Item Details" as UC2
+  usecase "Make Reservation" as UC3
+  usecase "Edit Reservation" as UC4
+  usecase "Cancel Reservation" as UC5
+  usecase "View My Reservations" as UC6
+  usecase "Add Menu Item" as UC7
+  usecase "Edit Menu Item" as UC8
+  usecase "Delete Menu Item" as UC9
+  usecase "View All Reservations" as UC10
+  usecase "Confirm Reservation" as UC11
+  usecase "Cancel Customer Reservation" as UC12
+  usecase "Send Notifications" as UC13
+  usecase "Manage User Profile" as UC14
+  usecase "Login/Register" as UC15
+  usecase "View Analytics" as UC16
+}
+
+Guest --> UC1
+Guest --> UC2
+Guest --> UC3
+Guest --> UC4
+Guest --> UC5
+Guest --> UC6
+Guest --> UC14
+Guest --> UC15
+
+Staff --> UC7
+Staff --> UC8
+Staff --> UC9
+Staff --> UC10
+Staff --> UC11
+Staff --> UC12
+Staff --> UC14
+Staff --> UC15
+Staff --> UC16
+
+UC3 ..> UC13 : <<triggers>>
+UC4 ..> UC13 : <<triggers>>
+UC5 ..> UC13 : <<triggers>>
+UC11 ..> UC13 : <<triggers>>
+UC12 ..> UC13 : <<triggers>>
+
+System --> UC13
+
+note right of UC3
+  Validates table availability
+  and date/time conflicts
+end note
+
+note right of UC11
+  Staff confirms pending
+  reservation requests
+end note
+
+@enduml
+
+@startuml Activity_Make_Reservation
+!theme plain
+title Activity Diagram - Guest Making Reservation
+
+start
+
+:Open App;
+:Navigate to Menu;
+
+:Browse Menu Items;
+note right
+  Can filter by category:
+  Starters, Mains, Desserts, etc.
+end note
+
+:Select Menu Item;
+:View Item Details;
+
+:Tap "Make Reservation";
+
+:Select Date;
+note right: Uses date picker
+
+:Select Time;
+note right: Uses time picker
+
+:Set Party Size;
+note right: Use +/- buttons
+
+if (Tables Available?) then (yes)
+  :Display Available Tables;
+  :Select Preferred Table;
+else (no)
+  :Show "No tables available";
+  stop
+endif
+
+:Add Special Requests\n(Optional);
+
+:Review Reservation Details;
+
+if (Details Correct?) then (yes)
+  :Tap "Confirm Reservation";
+else (no)
+  :Edit Details;
+  :Review Reservation Details;
+endif
+
+partition "Backend Processing" {
+  :Send to Server;
+  :Validate Availability;
+  
+  if (Still Available?) then (yes)
+    :Create Reservation in DB;
+    :Generate Booking ID;
+    :Send Confirmation Email;
+  else (no)
+    :Show Error Message;
+    stop
+  endif
+}
+
+:Display Confirmation Screen;
+:Show Booking ID and Details;
+
+fork
+  :Offer to Add to Calendar;
+  :Export Calendar Event;
+fork again
+  :Send Push Notification;
+fork again
+  :Update "My Reservations" List;
+end fork
+
+:Return to Dashboard;
+
+stop
+
+@enduml
+
+@startuml Activity_Staff_Menu_Management
+!theme plain
+title Activity Diagram - Staff Adding Menu Item
+
+start
+
+:Staff Logs In;
+:Navigate to Dashboard;
+:Tap "Menu Management";
+
+:View Current Menu Items;
+
+:Tap "+ Add" Button;
+
+:Open Add Menu Item Form;
+
+partition "Fill Item Details" {
+  :Tap "Add Photo";
+  
+  if (Photo Source?) then (Gallery)
+    :Select from Gallery;
+  else (Camera)
+    :Take New Photo;
+  endif
+  
+  :Upload Photo;
+  :Enter Item Name;
+  :Enter Description;
+  :Select Category (Dropdown);
+  :Enter Price;
+  :Set Availability (Toggle);
+}
+
+:Review Entered Information;
+
+if (All Fields Valid?) then (yes)
+  :Tap "Save Item";
+else (no)
+  :Show Validation Errors;
+  :Correct Errors;
+  :Review Entered Information;
+endif
+
+partition "Backend Processing" {
+  :Upload Image to Storage;
+  :Save Item to Database;
+  
+  if (Save Successful?) then (yes)
+    :Return Success Response;
+  else (no)
+    :Show Error Message;
+    stop
+  endif
+}
+
+:Display Success Message\n"✓ Menu item added";
+:Return to Menu List;
+:Show New Item in List;
+
+:Notify Other Staff Members\n(Optional);
+
+stop
+
+@enduml
+
+@startuml Sequence_Authentication
+!theme plain
+title Sequence Diagram - User Authentication
+
+actor User
+participant "UI\n(LoginScreen)" as UI
+participant "AuthViewModel" as VM
+participant "UserRepository" as Repo
+participant "Local DB\n(Room)" as Local
+participant "API Client" as API
+participant "Server" as Server
+participant "DataStore" as Prefs
+
+User -> UI : Enter email & password
+User -> UI : Tap "Login"
+
+UI -> VM : login(email, password)
+activate VM
+
+VM -> Repo : authenticateUser(email, password)
+activate Repo
+
+Repo -> API : POST /auth/login\n{email, password}
+activate API
+
+API -> Server : HTTP Request
+activate Server
+
+Server -> Server : Validate credentials
+Server -> Server : Generate JWT token
+
+alt Authentication Successful
+  Server -> API : 200 OK\n{token, user}
+  API -> Repo : Success(token, user)
+  
+  Repo -> Local : insertUser(user)
+  activate Local
+  Local -> Repo : User saved
+  deactivate Local
+  
+  Repo -> Prefs : saveAuthToken(token)
+  activate Prefs
+  Prefs -> Repo : Token saved
+  deactivate Prefs
+  
+  Repo -> VM : Success(user)
+  VM -> UI : Navigate to Dashboard
+  UI -> User : Show Dashboard
+  
+else Authentication Failed
+  Server -> API : 401 Unauthorized
+  API -> Repo : Error(Invalid credentials)
+  Repo -> VM : Error
+  VM -> UI : Show error message
+  UI -> User : "Invalid email or password"
+end
+
+deactivate Server
+deactivate API
+deactivate Repo
+deactivate VM
+
+@enduml
+
+@startuml State_Diagram_Reservation
+!theme plain
+title State Diagram - Reservation Lifecycle
+
+[*] --> Draft : User starts\nreservation
+
+Draft : User filling form
+Draft : Selecting date/time/table
+
+Draft --> Submitted : User taps\n"Confirm"
+
+Submitted : Waiting for\nstaff review
+Submitted : Status: PENDING
+
+Submitted --> Confirmed : Staff confirms
+Submitted --> Cancelled : Staff rejects\nor User cancels
+
+Confirmed : Status: CONFIRMED
+Confirmed : Table assigned
+Confirmed : Notifications sent
+
+Confirmed --> Modified : User edits\ndetails
+Modified : Re-validation needed
+Modified --> Confirmed : Changes saved
+
+Confirmed --> Cancelled : User cancels\nor Staff cancels
+Confirmed --> Completed : Reservation\ndate passed
+
+Cancelled : Status: CANCELLED
+Cancelled : Table released
+Cancelled : Cancellation\nnotification sent
+
+Completed : Status: COMPLETED
+Completed : Can leave review
+
+Cancelled --> [*]
+Completed --> [*]
+
+note right of Submitted
+  Automatic confirmation
+  if table is available
+  (some implementations)
+end note
+
+note right of Confirmed
+  Reminder notifications
+  sent 24hrs and 1hr
+  before reservation
+end note
+
+@enduml
+
+@startuml Component_Diagram
+!theme plain
+title Component Diagram - Mobile App Architecture
+
+package "Presentation Layer" {
+  component Login as "Login Screen"
+  component Menu as "Menu Screen"
+  component Reservation as "Reservation Screen"
+  component StaffDash as "Staff Dashboard"
+  component GuestDash as "Guest Dashboard"
+}
+
+package "ViewModel Layer" {
+  component AuthVM as "AuthViewModel"
+  component MenuVM as "MenuViewModel"
+  component ResVM as "ReservationViewModel"
+}
+
+package "Domain Layer" {
+  component UserRepo as "User Repository"
+  component MenuRepo as "Menu Repository"
+  component ResRepo as "Reservation Repository"
+}
+
+package "Data Layer" {
+  component Room as "Room Database"
+  component API as "API Client - Retrofit"
+  component DS as "DataStore"
+  component NotifHandler as "Notification Handler"
+}
+
+Login --> AuthVM
+Menu --> MenuVM
+Reservation --> ResVM
+StaffDash --> MenuVM
+StaffDash --> ResVM
+GuestDash --> MenuVM
+GuestDash --> ResVM
+
+AuthVM --> UserRepo
+MenuVM --> MenuRepo
+ResVM --> ResRepo
+
+UserRepo --> Room
+UserRepo --> API
+UserRepo --> DS
+
+MenuRepo --> Room
+MenuRepo --> API
+
+ResRepo --> Room
+ResRepo --> API
+
+NotifHandler --> ResRepo
+NotifHandler --> UserRepo
+
+interface "REST API" as REST
+API -- REST
+
+database "Local Storage" as LocalDB
+Room -- LocalDB
+
+note right of Room
+  Offline-first caching:
+  - Menu items
+  - User data
+  - Reservations
+  - Sync status
+end note
+
+note right of API
+  Retrofit interfaces:
+  - AuthService
+  - MenuService
+  - ReservationService
+end note
+
+@enduml
+
+@startuml Deployment_Diagram
+!theme plain
+title Deployment Diagram - Restaurant Management System
+
+node "User Device (Mobile)" {
+  artifact APK as "Android APK"
+  component App as "Restaurant App"
+  database SQLite as "SQLite Database"
+}
+
+node "Application Server" {
+  component APIServer as "API Server NodeJS"
+  component Auth as "Authentication Middleware"
+  component FileService as "File Storage Service"
+}
+
+node "Database Server" {
+  database PG as "PostgreSQL"
+}
+
+node "Notification Server" {
+  component FCM as "FCM - Firebase Cloud Messaging"
+}
+
+node "Cloud Storage" {
+  component S3 as "AWS S3 or Cloudinary"
+}
+
+App --> SQLite : Read/Write\nLocal Data
+App --> APIServer : HTTPS\nREST API
+App <-- FCM : Push\nNotifications
+
+APIServer --> PG : SQL\nQueries
+APIServer --> Auth : Verify\nJWT Token
+APIServer --> S3 : Upload\nMenu Images
+APIServer --> FCM : Send\nNotifications
+
+FileService --> S3 : Store/Retrieve\nImages
+
+note right of App
+  **Offline Capabilities:**
+  - Browse cached menu
+  - View past reservations
+  - Queue new reservations
+  - Sync when online
+end note
+
+note right of APIServer
+  **API Endpoints:**
+  - /auth/login
+  - /auth/register
+  - /menu (GET, POST, PUT, DELETE)
+  - /reservations (GET, POST, PUT, DELETE)
+  - /notifications (GET)
+end note
+
+note bottom of PG
+  **Tables:**
+  - users
+  - menu_items
+  - reservations
+  - notifications
+end note
+
+@enduml
+
+@startuml Class_Diagram_Data_Models
+!theme plain
+title Class Diagram - Core Data Models
+
+class User {
+  - id: Long
+  - email: String
+  - passwordHash: String
+  - fullName: String
+  - phone: String
+  - role: UserRole
+  - createdAt: LocalDateTime
+  + isStaff(): Boolean
+  + isGuest(): Boolean
+}
+
+enum UserRole {
+  GUEST
+  STAFF
+}
+
+class MenuItem {
+  - id: Long
+  - name: String
+  - description: String
+  - price: Double
+  - category: MenuCategory
+  - imageUrl: String
+  - isAvailable: Boolean
+  - createdAt: LocalDateTime
+  + formattedPrice(): String
+  + toggleAvailability(): void
+}
+
+enum MenuCategory {
+  STARTERS
+  MAINS
+  DESSERTS
+  DRINKS
+  SPECIALS
+}
+
+class Reservation {
+  - id: Long
+  - userId: Long
+  - reservationDate: LocalDate
+  - reservationTime: LocalTime
+  - partySize: Int
+  - tableNumber: String
+  - specialRequests: String?
+  - status: ReservationStatus
+  - createdAt: LocalDateTime
+  - updatedAt: LocalDateTime?
+  - cancelledAt: LocalDateTime?
+  + confirm(): void
+  + cancel(): void
+  + modify(date, time, size): void
+  + isPast(): Boolean
+  + isCancellable(): Boolean
+}
+
+enum ReservationStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+class Notification {
+  - id: Long
+  - userId: Long
+  - type: NotificationType
+  - title: String
+  - message: String
+  - isRead: Boolean
+  - createdAt: LocalDateTime
+  + markAsRead(): void
+}
+
+enum NotificationType {
+  NEW_RESERVATION
+  RESERVATION_CONFIRMED
+  RESERVATION_CANCELLED
+  RESERVATION_MODIFIED
+  REMINDER
+}
+
+User "1" -- "*" Reservation : makes
+User "1" -- "*" Notification : receives
+MenuItem "*" -- "1" MenuCategory : categorized by
+Reservation "*" -- "1" ReservationStatus : has
+Notification "*" -- "1" NotificationType : has
+User "*" -- "1" UserRole : has
+
+@enduml
+
+@startuml Wireframe_Flow
+!theme plain
+title Screen Flow with Wireframe References
+
+state "01. Login Screen" as S01 #LightGreen
+state "02. Registration Screen" as S02 #LightGreen
+state "03. Staff Dashboard" as S03 #LightBlue
+state "04. Menu Management (Staff)" as S04 #LightYellow
+state "05. Add/Edit Menu Item" as S05 #LightYellow
+state "06. Reservation Management (Staff)" as S06 #LightYellow
+state "07. Guest Home/Menu Browse" as S07 #LightBlue
+state "08. Menu Item Detail (Guest)" as S08 #LightYellow
+state "09. Make Reservation (Guest)" as S09 #LightYellow
+state "10. Reservation Confirmation" as S10 #LightCoral
+state "11. My Reservations (Guest)" as S11 #LightBlue
+
+S01 --> S02 : Create Account
+S01 --> S03 : Login (Staff)
+S01 --> S07 : Login (Guest)
+
+S03 --> S04 : Menu Management
+S03 --> S06 : Reservations
+S04 --> S05 : Add/Edit Item
+S05 --> S04 : Save
+
+S07 --> S08 : Select Item
+S08 --> S09 : Make Reservation
+S09 --> S10 : Confirm
+S10 --> S11 : View Reservations
+S07 --> S11 : My Reservations
+
+note right of S01
+  See Exercise 2 doc
+  Screen 1: Login Screen
+end note
+
+note right of S03
+  See Exercise 2 doc
+  Screen 3: Staff Dashboard
+end note
+
+note right of S07
+  See Exercise 2 doc
+  Screen 7: Guest Home
+end note
+
+@enduml

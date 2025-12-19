@@ -1,0 +1,6 @@
+@startuml test
+!theme plain
+cloud "Server" {
+  component Server
+}
+@enduml
